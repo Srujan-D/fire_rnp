@@ -3,7 +3,6 @@ logs/
 crnp_env/
 __pycache__/
 .vscode/
-fire_logs/
 stmgp/
 DATA4CMU/
 .git/
