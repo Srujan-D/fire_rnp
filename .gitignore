@@ -1,0 +1,14 @@
+noaa_datasets/
+logs/
+crnp_env/
+__pycache__/
+.vscode/
+fire_logs/
+stmgp/
+DATA4CMU/
+.git/
+fire_data/any_45/
+fire_data/rand_w45/
+fire_data/seq_100/
+fire_data/w45/
+../
