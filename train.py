@@ -8,6 +8,7 @@ import ipdb
 
 import matplotlib.pyplot as plt
 
+import concurrent.futures
 import matlab.engine
 from joblib import Parallel, delayed
 
@@ -22,6 +23,8 @@ class Trainer:
         self.data_mean = data_mean
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+        self.matlab_engine = matlab.engine.start_matlab()
+
         self.input_size = 2
         self.output_size = 1
         self.net = CRNP(input_size=self.input_size, output_size=self.output_size).to(self.device)
@@ -31,29 +34,12 @@ class Trainer:
             self.checkpoint = torch.load(os.path.join(self.args.logdir, str(self.args.epoch)+'.pt'))
             self.net.load_state_dict(self.checkpoint['model_state_dict'])
             self.optimizer.load_state_dict(self.checkpoint['optimizer_state_dict'])
-        self.min_val = train_dataloader.dataset.data.min()
-        self.sz1, self.sz2 = train_dataloader.dataset.data.shape[-2:]
+        self.min_val = test_dataloader.dataset.data.min()
+        self.sz1, self.sz2 = test_dataloader.dataset.data.shape[-2:]
         self.N = self.sz1 * self.sz2
         self.x_grid = ut.generate_grid(self.sz1, self.sz2)
         #self.eng = matlab.engine.start_matlab()
         #self.eng.init()
-
-    # def select_random(self, inp, return_idx=False):
-    #     batch_size, seq_length, _, w1, w2 = inp.shape
-    #     num_samples = self.args.num_samples
-        
-    #     samples = torch.zeros(batch_size, seq_length, num_samples).to(self.device)
-    #     print('----------------', samples.shape, inp.shape)
-    #     idxs = torch.zeros(batch_size, seq_length, num_samples, 2).to(self.device)
-    #     for i in range(batch_size):
-    #         for j in range(seq_length):
-    #             idxs[i, j, :, :] = torch.randint(0, w1, (num_samples, 2))
-    #             samples[i, j, :] = inp[i, j, :, idxs[i, j, :, 0].long(), idxs[i, j, :, 1].long()]
-        
-    #     if return_idx:
-    #         return samples.to(self.device), idxs.to(self.device)
-    #     else:
-    #         return samples.to(self.device)
 
     def select_rand_robot(self, inp, return_idx=False):
         # inp - num_batches x self.args.seq_length x 1 x self.sz1 x self.sz2
@@ -112,11 +98,40 @@ class Trainer:
             return xs.to(self.device), ys.to(self.device), idxs
         return xs.to(self.device), ys.to(self.device)
     
+
+    def close_matlab_engine(self):
+        self.matlab_engine.quit()
+
+    def matlab_call(self, input, in_shape):
+        return np.array(self.matlab_engine.parallel_function(matlab.double(input.tolist()), matlab.double([in_shape])))
+
+    def matlab_select_with_one_engine(self, inp, return_idx=False):
+        sz = inp.shape
+        inp_flat = inp.view(*sz[:-2], -1)
+        matlab_input = np.array(inp_flat)
+        matlab_input = matlab_input.reshape(matlab_input.shape[0], matlab_input.shape[1], matlab_input.shape[3])
+
+        results = Parallel(n_jobs=-1)(delayed(self.matlab_call)(matlab_input[i], matlab_input.shape[1]) for i in range(matlab_input.shape[0]))
+
+        results = np.array(results, dtype=np.int64).reshape(matlab_input.shape[0], matlab_input.shape[1], 1, self.args.num_samples)
+        idxs = torch.tensor(results)
+        ys = torch.gather(inp_flat, -1, idxs).permute([0,1,3,2])
+        x_all = self.x_grid.unsqueeze(1).expand(sz[0], sz[1], -1, -1)
+        xs = x_all.gather(-2, idxs.permute([0,1,3,2]).expand(-1,-1,-1,self.input_size))
+
+        if return_idx:
+            return xs.to(self.device), ys.to(self.device), idxs
+        return xs.to(self.device), ys.to(self.device)
+
+    def cleanup(self):
+        self.close_matlab_engine()
+
+    
     def matlab_select(self, inp, return_idx=False):
         # inp - num_batches x self.args.seq_length x 1 x self.sz1 x self.sz2
         def matlab_call(input, in_shape):
             eng = matlab.engine.start_matlab()
-            idx = eng.main_bot_distribute_window(matlab.double(input.tolist()), matlab.double([in_shape]))
+            idx = eng.main_bot_distribute_window(c)
             eng.quit()
             return np.array(idx)
         # sample self.args.num_samples in each timestep
@@ -166,30 +181,33 @@ class Trainer:
             # for batch_idx, (idx, inp, target) in enumerate(self.train_dataloader):
             for batch_idx, (idx, inp, target, fire_mean) in enumerate(self.train_dataloader):
                 self.data_mean = fire_mean
-                # step += 1
-                # x_context, y_context = self.select(inp)
-                # x_context, y_context = self.matlab_select(inp)
+
                 if gen_data_train == True:
                     # print('input shape', inp.shape)
-                    # x_context, y_context = self.select(inp)
-                    # x_context, y_context = self.select_random(inp)
+                    x_context, y_context = self.select(inp)
                     # x_context, y_context = self.select_rand_robot(inp)
-                    x_context, y_context = self.matlab_select(inp)
+                    # x_context, y_context = self.matlab_select(inp)
                     for i, j in enumerate(idx):
                         torch.save(x_context[i], os.path.join(self.args.logdir,'train_xs_' + str(j) + '.pt'))
                         torch.save(y_context[i], os.path.join(self.args.logdir,'train_ys_' + str(j) + '.pt'))
                     continue
                 else:
+                    # print('going in else')
                     step += 1
                     x_context = []
                     y_context = []
                     for i, j in enumerate(idx):
-                        x_context.append(torch.load(os.path.join(self.args.logdir,'train_xs_' + str(j) + '.pt'), self.device))
-                        y_context.append(torch.load(os.path.join(self.args.logdir,'train_ys_' + str(j) + '.pt'), self.device))
+                        # x_context.append(torch.load(os.path.join(self.args.logdir,'train_xs_' + str(j) + '.pt'), self.device))
+                        # y_context.append(torch.load(os.path.join(self.args.logdir,'train_ys_' + str(j) + '.pt'), self.device))
+                        
+                        ## for resuing Stmgp selected points:
+                        x_context.append(torch.load(os.path.join(self.args.take_points_dir,'train_xs_' + str(j) + '.pt'), self.device))
+                        y_context.append(torch.load(os.path.join(self.args.take_points_dir,'train_ys_' + str(j) + '.pt'), self.device))
                     x_context = torch.stack(x_context, 0)
                     y_context = torch.stack(y_context, 0)
                 x_target = self.x_grid.expand(len(inp),-1,-1).to(self.device)
                 y_target = target.view(target.shape[0], -1, 1).to(self.device)
+                x_target = x_target.repeat(1, (self.args.future+1), 1)
 
                 self.optimizer.zero_grad()
                 mu, sigma, dist, loss = self.net(x_context, y_context, x_target, y_target)
@@ -225,15 +243,10 @@ class Trainer:
             # for batch_idx, (idx, inp, target) in enumerate(self.train_dataloader):
             for batch_idx, (idx, inp, target, fire_mean) in enumerate(self.test_dataloader):
                 self.data_mean = fire_mean
-
-                # print(self.data_mean.shape)
-                # x_context, y_context, idxs = self.select(inp, return_idx=True)
-                # x_context, y_context, idxs = self.matlab_select(inp, return_idx=True)
                 if gen_data_test == True:
-                    # x_context, y_context, idxs = self.select(inp, return_idx=True)
-                    # x_context, y_context = self.select_random(inp, return_idx=True)
+                    x_context, y_context, idxs = self.select(inp, return_idx=True)
                     # x_context, y_context, idxs = self.select_rand_robot(inp, return_idx=True)
-                    x_context, y_context, idxs = self.matlab_select(inp, return_idx=True)
+                    # x_context, y_context, idxs = self.matlab_select(inp, return_idx=True)
                     for i, j in enumerate(idx):
                         torch.save(x_context[i], os.path.join(self.args.logdir,'test_xs_' + str(j) + '.pt'))
                         torch.save(y_context[i], os.path.join(self.args.logdir,'test_ys_' + str(j) + '.pt'))
@@ -244,14 +257,20 @@ class Trainer:
                     y_context = []
                     idxs = []
                     for i, j in enumerate(idx):
-                        x_context.append(torch.load(os.path.join(self.args.logdir,'test_xs_' + str(j) + '.pt'), self.device))
-                        y_context.append(torch.load(os.path.join(self.args.logdir,'test_ys_' + str(j) + '.pt'), self.device))
-                        idxs.append(torch.load(os.path.join(self.args.logdir,'test_idxs_' + str(j) + '.pt')))
+                        # x_context.append(torch.load(os.path.join(self.args.logdir,'test_xs_' + str(j) + '.pt'), self.device))
+                        # y_context.append(torch.load(os.path.join(self.args.logdir,'test_ys_' + str(j) + '.pt'), self.device))
+                        # idxs.append(torch.load(os.path.join(self.args.logdir,'test_idxs_' + str(j) + '.pt')))
+                        
+                        # ## for resuing Stmgp selected points:
+                        x_context.append(torch.load(os.path.join(self.args.take_points_dir,'test_xs_' + str(j) + '.pt'), self.device))
+                        y_context.append(torch.load(os.path.join(self.args.take_points_dir,'test_ys_' + str(j) + '.pt'), self.device))
+                        idxs.append(torch.load(os.path.join(self.args.take_points_dir,'test_idxs_' + str(j) + '.pt')))
                     x_context = torch.stack(x_context, 0)
                     y_context = torch.stack(y_context, 0)
                     idxs = torch.stack(idxs, 0)
                 x_target = self.x_grid.expand(len(inp),-1,-1).to(self.device)
                 y_target = target.view(target.shape[0], -1, 1).to(self.device)
+                x_target = x_target.repeat(1, (self.args.future+1), 1)
                 
                 mu, sigma, dist, loss = self.net(x_context, y_context, x_target, y_target)
                 abs_err += torch.sum((mu - y_target)**2)
@@ -260,17 +279,18 @@ class Trainer:
                 if save:
                     t = np.random.randint(0, len(inp))
                     # t = len(inp) - 1
-                    # print('y target shape', y_target[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2).shape)
-                    # print('data mean shape', self.data_mean[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2).shape)
-                    true = y_target[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2) + self.data_mean[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2)
-                    pred = mu[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2) + self.data_mean[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2)
-                    fn = os.path.join(self.args.logdir, self.args.runid, 'epoch_' + str(epoch) + '_' + str(batch_idx) + '.png')
-                    inps = self.reconstruct(y_context[t].cpu().numpy(), idxs[t].cpu().numpy(), t)
-                    # print('y shape', x_context.shape, y_context.shape)
-                    # print('true', y_target.shape)
-                    # print('pred', mu.shape)
-                    # ut.fire_save_image(y_context, idxs, y_target, pred, fn, var=None, data_mean=self.data_mean, sz1=self.sz1, sz2=self.sz2)
-                    ut.save_image(inps, true, pred, fn, var=None)
+                    if self.args.future == 0:
+                        true = y_target[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2) + self.data_mean[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2)
+                        pred = mu[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2) + self.data_mean[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2)
+                        fn = os.path.join(self.args.logdir, self.args.runid, 'epoch_' + str(epoch) + '_' + str(batch_idx) + '.png')
+                        inps = self.reconstruct(y_context[t].cpu().numpy(), idxs[t].cpu().numpy(), t)
+                        ut.save_image(inps, true, pred, fn, var=None)
+                    else:
+                        true = y_target[t].cpu().numpy().squeeze().reshape((self.args.future+1), self.sz1, self.sz2) #+ self.data_mean[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2)
+                        pred = mu[t].cpu().numpy().squeeze().reshape((self.args.future+1), self.sz1, self.sz2) #+ self.data_mean[t].cpu().numpy().squeeze().reshape(self.sz1, self.sz2)
+                        fn = os.path.join(self.args.logdir, self.args.runid, 'epoch_' + str(epoch) + '_' + str(batch_idx) + '.png')
+                        inps = self.reconstruct(y_context[t].cpu().numpy(), idxs[t].cpu().numpy(), t)
+                        ut.save_multi_futures(inps, true, pred, fn, var=None)
 
         if gen_data_test != True:
             test_mae = torch.sqrt(abs_err / (count * self.N))
@@ -282,13 +302,11 @@ class Trainer:
 
     def reconstruct(self, y_context, idxs, t):
         nb = len(y_context)
+        # print('nb', nb)
         canvas = [np.ones(self.N)*self.min_val for _ in range(nb)]
         mean = self.data_mean[t]
         for i in range(nb):
             idx = idxs[i].squeeze()
-            # print('y context', y_context[i].squeeze().shape)
-            # print('data mean shape 1',mean.shape)
-            # print('data mean shape2',mean.cpu().numpy().squeeze().shape)
             canvas[i][idx] = y_context[i].squeeze() + mean.cpu().numpy().squeeze().flatten()[idx]
             canvas[i] = canvas[i].reshape(self.sz1, self.sz2) 
         return canvas
@@ -311,9 +329,10 @@ class Trainer:
                 # x_context, y_context, idxs = self.select(inp, return_idx=True)
                 # x_context, y_context, idxs = self.matlab_select(inp, return_idx=True)
                 if gen_data_test == True:
-                    # x_context, y_context, idxs = self.select(inp, return_idx=True)
+                    x_context, y_context, idxs = self.select(inp, return_idx=True)
                     # x_context, y_context, idxs = self.select_rand_robot(inp, return_idx=True)
-                    x_context, y_context, idxs = self.matlab_select(inp, return_idx=True)
+                    # x_context, y_context, idxs = self.matlab_select(inp, return_idx=True)
+                    # x_context, y_context, idxs = self.matlab_select_with_one_engine(inp, return_idx=True)
                     if testing_save_results != True:
                         for i, j in enumerate(idx):
                             torch.save(x_context[i], os.path.join(self.args.logdir,'test_xs_' + str(j) + '.pt'))

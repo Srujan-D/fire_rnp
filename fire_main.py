@@ -31,7 +31,7 @@ class FireDataset(Dataset):
         self.factor = self.seq_length+self.future+1
 
         self.data = np.expand_dims(data, 1)
-        self.size = len(self.data)//(self.seq_length + self.future + 1)
+        self.size = len(self.data)//self.factor
 
     def __len__(self):
         return self.size
@@ -46,7 +46,8 @@ class FireDataset(Dataset):
         """
         actual_idx = idx*self.factor
         inp = self.data[actual_idx: actual_idx + self.seq_length]
-        target = self.data[actual_idx + self.seq_length: actual_idx + self.seq_length + 1 + self.future]
+        # print('inp', inp.shape)
+        target = self.data[actual_idx + self.seq_length: actual_idx + self.factor]
 
         ## if input is 0, set it to random number between 100 and 300
         for i in range(inp.shape[0]):
@@ -64,6 +65,7 @@ class FireDataset(Dataset):
                     # target[0, 0, i, j] = np.random.randint(100, 300)
 
         fire_mean = self.data[actual_idx: actual_idx + self.seq_length + 1 + self.future].mean(0)
+        fire_mean = np.zeros(fire_mean.shape)
 
         ## plot the input and target
         # for i in range(inp.shape[0]):
@@ -112,23 +114,7 @@ def get_fire_dataloaders(args):
     #         plt.imshow(f[j, :, :])
     #         plt.savefig(f'fire_testing/fire_{i}_{j}.png')
         
-    print('data.shape', data.shape, len(data))  # data.shape (800, 30, 30) 800
-
-    # normalize data between 0 and 1
-    # print('min max', np.min(data), np.max(data))
-    # print('---------normalizing----------')
-    # data_mean = data.mean(0)
-
-    # print(data_mean.shape)
-    # # if args.normalize_y:
-        
-    # min = np.min(data)
-    # max = np.max(data)
-    # data = (data - min)/(max - min)
-    # print('min max', np.min(data), np.max(data))
-
-    # print('data_mean', data_mean)
-        
+    print('data.shape', data.shape, len(data))  # data.shape (800, 30, 30) 800        
 
     seq_length = args.seq_length
     future = args.future + 1

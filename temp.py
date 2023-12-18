@@ -1,4 +1,21 @@
 import numpy as np
+import torch
+
+
+def generate_grid(h, w):
+    rows = torch.linspace(0, 1, h)
+    cols = torch.linspace(0, 1, w)
+    x, y = torch.meshgrid(rows, cols)
+    grid = torch.stack([x.flatten(), y.flatten()]).t()
+    print(grid.shape)
+    # grid = torch.stack([cols.repeat(h, 1).t().contiguous().view(-1), rows.repeat(w)], dim=1)
+    grid = grid.unsqueeze(0)
+    print(grid.shape)
+    return grid
+
+grid = generate_grid(30, 30)
+gird = grid.repeat(1, 4, 1)
+print(gird.shape)
 
 def generate_samples(matrix, N, M):
     """
@@ -36,8 +53,8 @@ def generate_samples(matrix, N, M):
 
 # Example usage:
 # Assuming you have a 3D matrix called 'your_matrix' of shape (7, 30, 30)
-N = 5  # Number of samples per agent
-M = 3  # Number of agents
+# N = 5  # Number of samples per agent
+# M = 3  # Number of agents
 
-result_samples = generate_samples(your_matrix, N, M)
-print(result_samples.shape)  # Should print (N, M, 7, 30, 30)
+# result_samples = generate_samples(your_matrix, N, M)
+# print(result_samples.shape)  # Should print (N, M, 7, 30, 30)

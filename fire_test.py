@@ -182,22 +182,23 @@ class FireDataset(Dataset):
         inp = self.data[actual_idx: actual_idx + self.seq_length]
         target = self.data[actual_idx + self.seq_length: actual_idx + self.seq_length + 1 + self.future]
 
-        ## if input is 0, set it to random number between 100 and 300
-        for i in range(inp.shape[0]):
-            for j in range(inp.shape[2]):
-                for k in range(inp.shape[3]):
-                    if inp[i, 0, j, k] == 0:
-                        inp[i, 0, j, k] = np.random.rand() * 0.1 + 0.05
-                        # inp[i, 0, j, k] = np.random.randint(100, 300)
+        # ## if input is 0, set it to random number between 100 and 300
+        # for i in range(inp.shape[0]):
+        #     for j in range(inp.shape[2]):
+        #         for k in range(inp.shape[3]):
+        #             if inp[i, 0, j, k] == 0:
+        #                 inp[i, 0, j, k] = np.random.rand() * 0.1 + 0.05
+        #                 # inp[i, 0, j, k] = np.random.randint(100, 300)
 
-        ## if target is 0, set it to random number between 100 and 300
-        for i in range(target.shape[2]):
-            for j in range(target.shape[3]):
-                if target[0, 0, i, j] == 0:
-                    target[0, 0, i, j] = np.random.rand() * 0.1 + 0.05
-                    # target[0, 0, i, j] = np.random.randint(100, 300)
+        # ## if target is 0, set it to random number between 100 and 300
+        # for i in range(target.shape[2]):
+        #     for j in range(target.shape[3]):
+        #         if target[0, 0, i, j] == 0:
+        #             target[0, 0, i, j] = np.random.rand() * 0.1 + 0.05
+        #             # target[0, 0, i, j] = np.random.randint(100, 300)
 
         fire_mean = self.data[actual_idx: actual_idx + self.seq_length + 1 + self.future].mean(0)
+        # fire_mean = np.zeros(fire_mean.shape)
 
         ## plot the input and target
         # for i in range(inp.shape[0]):
@@ -218,8 +219,9 @@ class FireDataset(Dataset):
  
 def get_fire_dataloaders(args):
     data = args.file_path
-    files = os.listdir(data)
-    files = [os.path.join(data, f) for f in files]
+    files=['fire_data.npy']
+    # files = os.listdir(data)
+    # files = [os.path.join(data, f) for f in files]
     fires = [np.load(f) for f in files]
     # # normalize each fire
     # whole_fire_mean = []
@@ -248,25 +250,10 @@ def get_fire_dataloaders(args):
         
     print('data.shape', data.shape, len(data))  # data.shape (800, 30, 30) 800
 
-    # normalize data between 0 and 1
-    # print('min max', np.min(data), np.max(data))
-    # print('---------normalizing----------')
-    # data_mean = data.mean(0)
-
-    # print(data_mean.shape)
-    # # if args.normalize_y:
-        
-    # min = np.min(data)
-    # max = np.max(data)
-    # data = (data - min)/(max - min)
-    # print('min max', np.min(data), np.max(data))
-
-    # print('data_mean', data_mean)
-        
-
     seq_length = args.seq_length
     future = args.future + 1
-    train_size = int(0.8 * len(data)//(seq_length + future))
+    # train_size = int(0.01 * len(data)//(seq_length + future))
+    train_size=0
     # offset = 16//(seq_length + future)
 
     # train_indices = np.arange(train_size)
@@ -311,7 +298,7 @@ if __name__ == '__main__':
     
 
     # trainer.checkpoint = torch.load('fire_logs/500_b_lr3/0/499.pt')
-    trainer.checkpoint = torch.load('/home/srujan/research/crnp/fire_logs/mgp_rnp_logs/0/9.pt')
+    trainer.checkpoint = torch.load('/home/srujan/research/crnp/fire_logs/lr_3_200epochs_mgp_rnp_500samples/0/199.pt')
     trainer.net.load_state_dict(trainer.checkpoint['model_state_dict'])
     trainer.optimizer.load_state_dict(trainer.checkpoint['optimizer_state_dict'])
     trainer.just_test(epoch=-1, save=True, gen_data_train=True, testing_save_results=True)

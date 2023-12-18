@@ -13,14 +13,16 @@ def get_fire_args():
     parser.add_argument('--shuffle', action='store_true', help='Shuffle the data')
     parser.add_argument('--batch-size', default=32, type=int, help='Batch size')
     parser.add_argument('--num-workers', default=n_workers, type=int, help='Number of workers for data loader')
-    parser.add_argument('--num-epochs', default=10, type=int, help='Number of epochs to train for')
-    parser.add_argument('--epoch', default=-2, type=int, help='load from this epoch.pt file (-2 means gen data and scratch train, -1 means only scratch train')
+    parser.add_argument('--num-epochs', default=200, type=int, help='Number of epochs to train for')
+    parser.add_argument('--epoch', default=-1, type=int, help='load from this epoch.pt file (-2 means gen data and scratch train, -1 means only scratch train')
 
-    parser.add_argument('--lr', default=1e-4, type=float, help='Learning rate')
-    parser.add_argument('--save-every', default=1, type=int, help='Save every ... epochs')
+    parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
+    parser.add_argument('--save-every', default=5, type=int, help='Save every ... epochs')
     parser.add_argument('--test', action='store_true', help='Test the model')
     parser.add_argument('--load-model', default=None, help='Load model from a .pth file')
     parser.add_argument('--save-dir', default='models', help='Directory to save models')
+    parser.add_argument('--take-points-dir', default='fire_logs/mgp_rnp_logs_10epochs_500samples/', help='Directory to save logs')        # for reusing stmgp points of 500 fire data
+    # parser.add_argument('--take-points-dir', default='fire_logs', help='Directory to save logs')
     parser.add_argument('--logdir', default='fire_logs', help='Directory to save logs')
     parser.add_argument('--logid', default=None, type=str, help='unique id for each experiment')
 
@@ -64,33 +66,26 @@ def get_fire_args():
 
     return args
 
-
 def get_args():
     parser = argparse.ArgumentParser()
 
     # DATASET
-    # # air:
     data_file = 'noaa_datasets/air.sig995.mon.mean.nc'
-    # # sst:
-    # data_file = 'noaa_datasets/sst.day.mean.2020.nc'
-    # # rhum:
-    # data_file = 'noaa_datasets/rhum.mon.mean.nc'
-    # # animal:
     # data_file = 'animal_data.mat'
     parser.add_argument('--data-file', default=data_file)
     parser.add_argument('--random-roi', action='store_true', help='A random region of interest is sampled at every instant')
-    parser.add_argument('--roi-size', default=20, type=int, help='size of region of interest')
+    parser.add_argument('--roi-size', default=30, type=int, help='size of region of interest')
     # these are indices, check the data file to see the actual values of them
-    parser.add_argument('--lat-min', default=0, type=int, help='minimum latitude index')
-    parser.add_argument('--lat-max', default=45, type=int, help='maximum latitude index')
-    parser.add_argument('--lon-min', default=0, type=int, help='minimum longtitude index')
-    parser.add_argument('--lon-max', default=21, type=int, help='maximum longtitude index')
+    parser.add_argument('--lat-min', default=50, type=int, help='minimum latitude index')
+    parser.add_argument('--lat-max', default=80, type=int, help='maximum latitude index')
+    parser.add_argument('--lon-min', default=25, type=int, help='minimum longtitude index')
+    parser.add_argument('--lon-max', default=45, type=int, help='maximum longtitude index')
 
     # TRAINING
     parser.add_argument('--normalize-y', action='store_true', help='set target value between 0 and 1')
     parser.add_argument('--seq-length', default=6, type=int, help='length of training sequence (default 6)')
     # parser.add_argument('--eval-timesteps', default=12, type=int, help='evaluate on these timesteps')
-    parser.add_argument('--num-epochs', default=2, type=int)
+    parser.add_argument('--num-epochs', default=50*2, type=int)
     parser.add_argument('--lr', default=1e-3, type=float)
     parser.add_argument('--num-samples', default=10, type=int, help='number of points in each timestep')
     parser.add_argument('--future', default=0, type=int, help='train on 1 + future timesteps')

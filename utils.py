@@ -146,13 +146,73 @@ def save_image(inps, true, mu, fn, var=None):
     )
     ax[n].set_title("Actual (T={})".format(n + 1))
 
-    sns.heatmap(
-        mu, ax=ax[n + 1], cmap="ocean", vmin=vmin, vmax=vmax, cbar=False, square=False
-    )
     # sns.heatmap(
-    #     mu, ax=ax[n + 1], cmap="ocean", vmin=mu.min(), vmax=mu.max(), cbar=True, square=False
+    #     mu, ax=ax[n + 1], cmap="ocean", vmin=vmin, vmax=vmax, cbar=False, square=False
     # )
+    sns.heatmap(
+        mu, ax=ax[n + 1], cmap="ocean", vmin=mu.min(), vmax=mu.max(), cbar=True, square=False
+    )
     ax[n + 1].set_title("Prediction (T={})".format(n + 1))
+
+    fig.subplots_adjust(wspace=0.05, hspace=0.1)
+
+    plt.savefig(fn)
+    plt.close(fig)
+
+def save_multi_futures(inps, true, mu, fn, var=None):
+    n = len(inps)
+    f = len(mu)
+
+    # print(len(inps), len(mu), len(true))
+    # TODO: find a way to determine figsize
+    # compute this from the size of image
+    fig, ax = plt.subplots(2, n+f, figsize=(16, 8), sharex=True, sharey=True)
+    ax = ax.flatten()
+    for ax_ in ax:
+        ax_.get_xaxis().set_visible(False)
+        ax_.get_yaxis().set_visible(False)
+
+    n = len(inps)
+    vmin = true.min()
+    vmax = true.max()
+    cbar_ax = fig.add_axes([0.91, 0.3, 0.03, 0.4])
+
+    sns.heatmap(
+        inps[0],
+        ax=ax[0],
+        cmap="ocean",
+        vmin=vmin,
+        vmax=vmax,
+        cbar=True,
+        cbar_ax=cbar_ax,
+        square=False,
+    )
+    ax[0].set_title("T=1")
+    for i in range(1, n):
+        sns.heatmap(
+            inps[i],
+            ax=ax[i],
+            cmap="ocean",
+            vmin=vmin,
+            vmax=vmax,
+            cbar=False,
+            square=False,
+        )
+        ax[i].set_title("T={}".format(i + 1))
+
+    for i in range(f):  
+        sns.heatmap(
+            true[i], ax=ax[n+i], cmap="ocean", vmin=vmin, vmax=vmax, cbar=False, square=False
+        )
+        ax[n+i].set_title("Actual (T={})".format(n + i+ 1))
+ 
+        # sns.heatmap(
+        #     mu, ax=ax[n + 1], cmap="ocean", vmin=vmin, vmax=vmax, cbar=False, square=False
+        # )
+        sns.heatmap(
+            mu[i], ax=ax[2*n + i+ 1], cmap="ocean", vmin=mu.min(), vmax=mu.max(), cbar=True, square=False
+        )
+        ax[2*n + i+ 1].set_title("Prediction (T={})".format(n +i + 1))
 
     fig.subplots_adjust(wspace=0.05, hspace=0.1)
 

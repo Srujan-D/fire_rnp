@@ -8,19 +8,22 @@ n_workers = multiprocessing.cpu_count()-10
 def get_fire_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--file-path', default='fire_data/fire_data/fire_map')
+    # parser.add_argument('--file-path', default='fire_data/fire_data/fire_map')
+    parser.add_argument('--file-path', default='../crnp')
     parser.add_argument('--normalize-y', action='store_true', help='Normalize the target between 0 and 1')
     parser.add_argument('--shuffle', action='store_true', help='Shuffle the data')
     parser.add_argument('--batch-size', default=32, type=int, help='Batch size')
     parser.add_argument('--num-workers', default=n_workers, type=int, help='Number of workers for data loader')
-    parser.add_argument('--num-epochs', default=500, type=int, help='Number of epochs to train for')
+    parser.add_argument('--num-epochs', default=200, type=int, help='Number of epochs to train for')
     parser.add_argument('--epoch', default=-2, type=int, help='load from this epoch.pt file (-2 means gen data and scratch train, -1 means only scratch train')
 
-    parser.add_argument('--lr', default=1e-4, type=float, help='Learning rate')
-    parser.add_argument('--save-every', default=10, type=int, help='Save every ... epochs')
+    parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
+    parser.add_argument('--save-every', default=5, type=int, help='Save every ... epochs')
     parser.add_argument('--test', action='store_true', help='Test the model')
     parser.add_argument('--load-model', default=None, help='Load model from a .pth file')
     parser.add_argument('--save-dir', default='models', help='Directory to save models')
+    parser.add_argument('--take-points-dir', default='fire_logs/mgp_rnp_logs_10epochs_500samples/', help='Directory to save logs')        # for reusing stmgp points of 500 fire data
+    # parser.add_argument('--take-points-dir', default='fire_logs', help='Directory to save logs')
     parser.add_argument('--logdir', default='fire_logs', help='Directory to save logs')
     parser.add_argument('--logid', default=None, type=str, help='unique id for each experiment')
 
@@ -38,7 +41,7 @@ def get_fire_args():
     parser.add_argument('--num-layers', default=2, type=int, help='Number of layers in LSTM')
     parser.add_argument('--dropout', default=0.5, type=float, help='Dropout ratio')
     parser.add_argument('--bidirectional', action='store_true', help='Use bidirectional LSTM')
-    parser.add_argument('--num-samples', default=30, type=int, help='Number of samples to generate')
+    parser.add_argument('--num-samples', default=500, type=int, help='Number of samples to generate')
 
     args = parser.parse_args()
 
